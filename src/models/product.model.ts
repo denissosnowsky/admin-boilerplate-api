@@ -28,7 +28,7 @@ export class Product extends Entity {
   @property({
     type: 'string',
   })
-  image?: string;
+  previewImage?: string;
 
   // Define well-known properties here
 
