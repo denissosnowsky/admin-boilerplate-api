@@ -16,14 +16,21 @@ import {
   del,
   requestBody,
   response,
+  Request,
+  Response,
+  RestBindings,
 } from '@loopback/rest';
 import {Product} from '../models';
 import {ProductRepository} from '../repositories';
 
+import multer from 'multer';
+import {inject} from '@loopback/core';
+import {ProductRes} from '../types/ProductRes';
+
 export class ProductController {
   constructor(
     @repository(ProductRepository)
-    public productRepository : ProductRepository,
+    public productRepository: ProductRepository,
   ) {}
 
   @post('/products')
@@ -34,17 +41,35 @@ export class ProductController {
   async create(
     @requestBody({
       content: {
-        'application/json': {
-          schema: getModelSchemaRef(Product, {
-            title: 'NewProduct',
-            exclude: ['id'],
-          }),
+        'multipart/form-data': {
+          'x-parser': 'stream',
+          schema: {type: 'object'},
         },
       },
     })
-    product: Omit<Product, 'id'>,
-  ): Promise<Product> {
-    return this.productRepository.create(product);
+    request: Request<any, Response, Product>,
+    @inject(RestBindings.Http.RESPONSE) response: Response,
+  ): Promise<ProductRes> {
+    return new Promise<ProductRes>((resolve, reject) => {
+      const storage = multer.memoryStorage();
+      const upload = multer({storage});
+
+      upload.any()(request, response, async err => {
+        if (err) reject(err);
+        else {
+          const body = request.body;
+
+          const product = {
+            name: body.name,
+            description: body.description,
+            categoryId: body.categoryId,
+            previewImage: request.files as Express.Multer.File[] | undefined,
+          };
+
+          resolve(await this.productRepository.createProduct(product));
+        }
+      });
+    });
   }
 
   @get('/products/count')
@@ -52,9 +77,7 @@ export class ProductController {
     description: 'Product model count',
     content: {'application/json': {schema: CountSchema}},
   })
-  async count(
-    @param.where(Product) where?: Where<Product>,
-  ): Promise<Count> {
+  async count(@param.where(Product) where?: Where<Product>): Promise<Count> {
     return this.productRepository.count(where);
   }
 
@@ -72,8 +95,8 @@ export class ProductController {
   })
   async find(
     @param.filter(Product) filter?: Filter<Product>,
-  ): Promise<Product[]> {
-    return this.productRepository.find(filter);
+  ): Promise<ProductRes[]> {
+    return await this.productRepository.findProducts(filter);
   }
 
   @patch('/products')
@@ -106,9 +129,10 @@ export class ProductController {
   })
   async findById(
     @param.path.string('id') id: string,
-    @param.filter(Product, {exclude: 'where'}) filter?: FilterExcludingWhere<Product>
-  ): Promise<Product> {
-    return this.productRepository.findById(id, filter);
+    @param.filter(Product, {exclude: 'where'})
+    filter?: FilterExcludingWhere<Product>,
+  ): Promise<ProductRes> {
+    return await this.productRepository.findProductById(id, filter);
   }
 
   @patch('/products/{id}')
@@ -135,9 +159,37 @@ export class ProductController {
   })
   async replaceById(
     @param.path.string('id') id: string,
-    @requestBody() product: Product,
+    @requestBody({
+      content: {
+        'multipart/form-data': {
+          'x-parser': 'stream',
+          schema: {type: 'object'},
+        },
+      },
+    })
+    request: Request<any, Response, Product>,
+    @inject(RestBindings.Http.RESPONSE) response: Response,
   ): Promise<void> {
-    await this.productRepository.replaceById(id, product);
+    return new Promise<void>((resolve, reject) => {
+      const storage = multer.memoryStorage();
+      const upload = multer({storage});
+
+      upload.any()(request, response, async err => {
+        if (err) reject(err);
+        else {
+          const body = request.body;
+
+          const product = {
+            name: body.name,
+            description: body.description,
+            categoryId: body.categoryId,
+            previewImage: request.files as Express.Multer.File[] | undefined,
+          };
+
+          resolve(await this.productRepository.replaceProductById(id, product));
+        }
+      });
+    });
   }
 
   @del('/products/{id}')
