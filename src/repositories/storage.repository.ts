@@ -14,4 +14,8 @@ export class StorageRepository {
   async getImage(key: string): Promise<AWS.S3.GetObjectOutput> {
     return this.dataSource.getImage(key);
   }
+
+  async removeImage(key: string): Promise<void> {
+    return this.dataSource.removeImage(key);
+  }
 }

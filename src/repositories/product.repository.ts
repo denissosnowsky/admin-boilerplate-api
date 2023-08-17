@@ -4,6 +4,7 @@ import {
   DataObject,
   DefaultCrudRepository,
   Filter,
+  FilterExcludingWhere,
 } from '@loopback/repository';
 import {MongoDataSource} from '../datasources';
 import {Product, ProductRelations} from '../models';
@@ -25,7 +26,7 @@ export class ProductRepository extends DefaultCrudRepository<
 
   async createProduct(
     entity: DataObject<
-      Omit<Product, 'previewImage'> & {previewImage: Express.Multer.File[]}
+      Omit<Product, 'previewImage'> & {previewImage?: Express.Multer.File[]}
     >,
     options?: AnyObject | undefined,
   ): Promise<ProductRes> {
@@ -42,12 +43,10 @@ export class ProductRepository extends DefaultCrudRepository<
       options,
     );
 
-    const createdProductWithImage = {
+    return {
       ...createdProduct,
       previewImage: await this.defineImage(createdProduct.previewImage),
     };
-
-    return createdProductWithImage;
   }
 
   async findProducts(
@@ -56,14 +55,56 @@ export class ProductRepository extends DefaultCrudRepository<
   ): Promise<ProductRes[]> {
     const products = await super.find(filter, options);
 
-    const porductsWithImages = await Promise.all(
+    return await Promise.all(
       products.map(async product => ({
         ...product,
         previewImage: await this.defineImage(product.previewImage),
       })),
     );
+  }
 
-    return porductsWithImages;
+  async replaceProductById(
+    id: string,
+    data: DataObject<
+      Omit<Product, 'previewImage'> & {previewImage?: Express.Multer.File[]}
+    >,
+    options?: AnyObject | undefined,
+  ): Promise<void> {
+    let images: ManagedUpload.SendData[] | null = null;
+
+    const imageFromMongoDB = await super.findById(id);
+
+    if (data.previewImage?.length) {
+      images = await this.storageRepository.upload(
+        data.previewImage as Express.Multer.File[],
+      );
+
+      if (imageFromMongoDB.previewImage) {
+        await this.storageRepository.removeImage(imageFromMongoDB.previewImage);
+      }
+    }
+
+    await super.replaceById(
+      id,
+      {
+        ...data,
+        previewImage: images ? images[0].Key : imageFromMongoDB.previewImage,
+      },
+      options,
+    );
+  }
+
+  async findProductById(
+    id: string,
+    filter?: FilterExcludingWhere<Product> | undefined,
+    options?: AnyObject | undefined,
+  ): Promise<ProductRes> {
+    const productFromMongoDB = await super.findById(id, filter, options);
+
+    return {
+      ...productFromMongoDB,
+      previewImage: await this.defineImage(productFromMongoDB.previewImage),
+    };
   }
 
   private async defineImage(

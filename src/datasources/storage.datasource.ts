@@ -42,6 +42,18 @@ export class StorageDataSource {
     });
   }
 
+  async removeImage(key: string): Promise<void> {
+    const params = {Bucket: BUCKET, Key: key};
+
+    return new Promise((resolve, reject) => {
+      s3.deleteObject(params, function (err) {
+        if (err) reject(err);
+
+        resolve();
+      });
+    });
+  }
+
   private bufferToStream(buffer: Buffer) {
     const duplexStream = new Duplex();
     duplexStream.push(buffer);
