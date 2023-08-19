@@ -86,6 +86,24 @@ export class ProductController {
     return await this.productRepository.findProducts(filter);
   }
 
+  @get('/productsVisble')
+  @response(200, {
+    description: 'Array of Product model instances',
+    content: {
+      'application/json': {
+        schema: {
+          type: 'array',
+          items: getModelSchemaRef(Product, {includeRelations: true}),
+        },
+      },
+    },
+  })
+  async findVisible(
+    @param.filter(Product) filter?: Filter<Product>,
+  ): Promise<ProductRes[]> {
+    return await this.productRepository.findVisibleProducts(filter);
+  }
+
   @patch('/products')
   @response(200, {
     description: 'Product PATCH success count',
@@ -189,10 +207,10 @@ export class ProductController {
 
           const product = {
             name: body.name,
-            description: body.description,
-            categoryId: body.categoryId,
-            previewImage: request.files as Express.Multer.File[] | undefined,
             hidden: body.hidden,
+            categoryId: body.categoryId,
+            description: body.description,
+            previewImage: request.files as Express.Multer.File[] | undefined,
           };
 
           resolve(await controllerWrapper(product));
