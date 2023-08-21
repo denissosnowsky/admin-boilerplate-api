@@ -26,6 +26,7 @@ import {ProductRepository} from '../repositories';
 import multer from 'multer';
 import {inject} from '@loopback/core';
 import {ProductRes} from '../types/ProductRes';
+import {ProductWithFileImage} from '../types/ProductWithFileImage';
 
 export class ProductController {
   constructor(
@@ -50,26 +51,12 @@ export class ProductController {
     request: Request<any, Response, Product>,
     @inject(RestBindings.Http.RESPONSE) response: Response,
   ): Promise<ProductRes> {
-    return new Promise<ProductRes>((resolve, reject) => {
-      const storage = multer.memoryStorage();
-      const upload = multer({storage});
-
-      upload.any()(request, response, async err => {
-        if (err) reject(err);
-        else {
-          const body = request.body;
-
-          const product = {
-            name: body.name,
-            description: body.description,
-            categoryId: body.categoryId,
-            previewImage: request.files as Express.Multer.File[] | undefined,
-          };
-
-          resolve(await this.productRepository.createProduct(product));
-        }
-      });
-    });
+    return await this.parseProductWithFiles(
+      request,
+      response,
+      async (product: ProductWithFileImage) =>
+        await this.productRepository.createProduct(product),
+    );
   }
 
   @get('/products/count')
@@ -97,6 +84,24 @@ export class ProductController {
     @param.filter(Product) filter?: Filter<Product>,
   ): Promise<ProductRes[]> {
     return await this.productRepository.findProducts(filter);
+  }
+
+  @get('/productsVisble')
+  @response(200, {
+    description: 'Array of Product model instances',
+    content: {
+      'application/json': {
+        schema: {
+          type: 'array',
+          items: getModelSchemaRef(Product, {includeRelations: true}),
+        },
+      },
+    },
+  })
+  async findVisible(
+    @param.filter(Product) filter?: Filter<Product>,
+  ): Promise<ProductRes[]> {
+    return await this.productRepository.findVisibleProducts(filter);
   }
 
   @patch('/products')
@@ -170,7 +175,28 @@ export class ProductController {
     request: Request<any, Response, Product>,
     @inject(RestBindings.Http.RESPONSE) response: Response,
   ): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+    return await this.parseProductWithFiles(
+      request,
+      response,
+      async (product: ProductWithFileImage) =>
+        await this.productRepository.replaceProductById(id, product),
+    );
+  }
+
+  @del('/products/{id}')
+  @response(204, {
+    description: 'Product DELETE success',
+  })
+  async deleteById(@param.path.string('id') id: string): Promise<void> {
+    await this.productRepository.deleteById(id);
+  }
+
+  private async parseProductWithFiles<Res>(
+    request: Request<any, Response, Product>,
+    response: Response,
+    controllerWrapper: (product: ProductWithFileImage) => Promise<Res>,
+  ): Promise<Res> {
+    return new Promise<Res>((resolve, reject) => {
       const storage = multer.memoryStorage();
       const upload = multer({storage});
 
@@ -181,22 +207,15 @@ export class ProductController {
 
           const product = {
             name: body.name,
-            description: body.description,
+            hidden: body.hidden,
             categoryId: body.categoryId,
+            description: body.description,
             previewImage: request.files as Express.Multer.File[] | undefined,
           };
 
-          resolve(await this.productRepository.replaceProductById(id, product));
+          resolve(await controllerWrapper(product));
         }
       });
     });
-  }
-
-  @del('/products/{id}')
-  @response(204, {
-    description: 'Product DELETE success',
-  })
-  async deleteById(@param.path.string('id') id: string): Promise<void> {
-    await this.productRepository.deleteById(id);
   }
 }

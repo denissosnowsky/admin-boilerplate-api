@@ -107,6 +107,27 @@ export class ProductRepository extends DefaultCrudRepository<
     };
   }
 
+  async findVisibleProducts(
+    filter?: Filter<Product> | undefined,
+    options?: AnyObject | undefined,
+  ) {
+    const filterVisibleOnly: Filter<Product> = {
+      where: {hidden: {neq: true}},
+    };
+
+    const products = await super.find(
+      filter ? {...filterVisibleOnly, ...filter} : filterVisibleOnly,
+      options,
+    );
+
+    return await Promise.all(
+      products.map(async product => ({
+        ...product,
+        previewImage: await this.defineImage(product.previewImage),
+      })),
+    );
+  }
+
   private async defineImage(
     previewImage?: string,
   ): Promise<S3.Body | undefined> {
